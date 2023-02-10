@@ -13,7 +13,7 @@
 * 每个CPU核心拥有独立的cache
 * 多个线程并行在不同的CPU核心上
 * 多线程程序可能同时对同一个内存值进行读写
-* 编译器优化会重排语句顺序
+* 编译器优化会重排代码执行顺序
 * CPU优化会进行指令重排（不同架构存在不同的优化策略）
 
 **测试CPU指令重排：**
@@ -60,7 +60,8 @@ func OutOfOrder() {
 
 ```
 
-*在任何顺序一致的执行中，x = 1或y = 1必须首先发生，然后另一个线程中的读取必须能够观察到它(此赋值事件)，因此r1 = 0，r2 = 0是不可能的。但是在一个TSO系统中，线程1和线程2可能会将它们的写操作排队，然后在任何一个写操作进入内存之前从内存中读取，这样两个读操作都会看到零。*
+*在任何顺序一致的执行中，x = 1或y = 1必须首先发生，然后另一个线程中的读取必须能够观察到它(此赋值事件)，因此r1 = 0，r2 =
+0是不可能的。但是在一个TSO系统中，线程1和线程2可能会将它们的写操作排队，然后在任何一个写操作进入内存之前从内存中读取，这样两个读操作都会看到零。*
 
 > [*Litmus Test*](https://go.dev/ref/mem)
 
@@ -74,6 +75,8 @@ r1 = y                r2 = x
 On sequentially consistent hardware: no.
 On x86 (or other TSO): yes!
 ~~~
+
+DRF-SC 无竞争下的顺序一致性
 
 **如何避免data race?**
 需要定义一个规范，让CPU和编译器知道如何在不破坏代码顺序一致性的情况下进行优化
@@ -105,15 +108,51 @@ CPU在执行DRF-SC代码时保证顺序一致性
 
 > [*Go Memory Model*](https://go.dev/ref/mem)
 
-初始化：
-Goroutine创建：
-Goroutine销毁：
-Channel通信：
-锁：
-Once：
-Atomic Values：
+* 初始化：
+
+* Goroutine创建：
+
+* Goroutine销毁：
+
+* Channel通信：
+
+> *A send on a channel is synchronized before the completion of the corresponding receive from that channel.*
+>
+>对于缓冲通道，向通道发送数据synchronized before从通道接收数据
+
+~~~go
+var c = make(chan int, 10)
+var a string
+
+func f() {
+	a = "hello, world" // 1
+	c <- 0 // 2
+}
+
+func main() {
+	go f()
+	<-c // 3
+	print(a) // 4
+}
+
+// 1->2->3->4
+~~~
+
+* 锁：
+
+* Once：
+
+* Atomic Values：
 
 **通过实际的例子来了解Go内存模型**
+
+
+**Go的内存模型始于以下建议:**
+
+* 修改由多个goroutine同时访问的数据的程序必须串行化这些访问。
+* 为了实现串行访问, 需要使用channel操作或其他同步原语(如sync和sync/atomic包中的原语)来保护数据。
+* 如果你必须阅读本文的其余部分才能理解你的程序的行为，那你太聪明了。
+* 别自作聪明。
 
 **设计哲学：**
 
